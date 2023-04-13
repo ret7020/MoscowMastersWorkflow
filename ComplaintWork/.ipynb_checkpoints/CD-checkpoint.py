@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[4]:
 
 
 import pandas as pd
@@ -39,19 +39,13 @@ keywords = kw_model.extract_keywords('''Supervised learning is the machine learn
 get_ipython().run_cell_magic('time', '', "keywords = kw_model.extract_keywords('''Supervised learning is the machine learning task of learning a function that\n         maps an input to an output based on example input-output pairs. It infers a\n         function from labeled training data consisting of a set of training examples.\n         In supervised learning, each example is a pair consisting of an input object\n         (typically a vector) and a desired output value (also called the supervisory signal).\n         A supervised learning algorithm analyzes the training data and produces an inferred function,\n         which can be used for mapping new examples. An optimal scenario will allow for the\n         algorithm to correctly determine the class labels for unseen instances. This requires\n         the learning algorithm to generalize from the training data to unseen situations in a\n         'reasonable' way (see inductive bias).\n''', keyphrase_ngram_range=(1, 3))\n")
 
 
-# In[13]:
+# In[20]:
 
 
-complaints = pd.read_csv("./data/complaints.csv").dropna().head(3000)
+complaints = pd.read_csv("./complaints/complaints.csv").dropna().head(3000)
 
 
-# In[14]:
-
-
-complaints.Product.unique()
-
-
-# In[15]:
+# In[24]:
 
 
 complaints = complaints.rename(columns={"Consumer complaint narrative": "narrative"})
@@ -84,7 +78,7 @@ f(complaints.iloc[0].narrative)
 complaints["narrative_keyngrams"] = complaints["narrative"].parallel_apply(f)
 
 
-# In[16]:
+# In[35]:
 
 
 complaints.head(5)
@@ -1035,12 +1029,13 @@ y_pred_cb = clf_cb.predict(X_test)
 complaints
 
 
-# In[19]:
+# In[39]:
 
 
 # Catboost only classification
 from catboost import CatBoostClassifier, Pool
 
+complaints = pd.read_csv("./complaints/complaints.csv").dropna().head(3000)
 
 def fit_model(train_pool, test_pool, **kwargs):
     model = CatBoostClassifier(
@@ -1054,53 +1049,35 @@ def fit_model(train_pool, test_pool, **kwargs):
     return model.fit(
             train_pool,
             eval_set=test_pool,
-            verbose=1,
+            verbose=100,
             plot=True,
             use_best_model=True)
 
 
-# In[55]:
+# In[42]:
 
 
 complaints.head()
 
 
-# In[20]:
+# In[44]:
 
 
 # Factorize
 complaints["product_id"] = complaints["Product"].factorize()[0]
 
 
-# In[21]:
+# In[45]:
 
 
 # Drop trash
 complaints = complaints.drop(["Date received", "Sub-product", "Sub-issue", "Company", "State", "ZIP code", "Tags", "Consumer consent provided?", "Submitted via", "Date sent to company", "Company response to consumer", "Timely response?", "Consumer disputed?", "Complaint ID"], axis=1)
 
 
-# In[22]:
+# In[48]:
 
 
 complaints
-
-
-# In[28]:
-
-
-complaints["word_tokens"] = complaints.apply(lambda r: r.Issue + " " + r.narrative + " " + r["Company public response"], axis=1)
-
-
-# In[31]:
-
-
-complaints = complaints.drop(["Issue", "narrative", "Company public response"], axis=1)
-
-
-# In[33]:
-
-
-complaints.product_id.unique()
 
 
 # In[29]:
@@ -1109,19 +1086,13 @@ complaints.product_id.unique()
 complaints.Product.unique()
 
 
-# In[ ]:
+# In[47]:
 
 
 complaints = complaints.drop("Product", axis=1)
 
 
-# In[35]:
-
-
-complaints
-
-
-# In[100]:
+# In[49]:
 
 
 from sklearn.model_selection import train_test_split
@@ -1130,47 +1101,35 @@ train, valid = train_test_split(
     complaints,
     train_size=0.75,
     random_state=42,
-    stratify=complaints['target'])
+    stratify=complaints['product_id'])
 y_train, X_train = \
-    train['target'], train.drop(['target'], axis=1)
+    train['product_id'], train.drop(['product_id'], axis=1)
 y_valid, X_valid = \
-    valid['target'], valid.drop(['target'], axis=1)
+    valid['product_id'], valid.drop(['product_id'], axis=1)
 
 
-# In[101]:
+# In[50]:
 
 
 X_valid.shape
 
 
-# In[102]:
-
-
-X_train
-
-
-# In[99]:
-
-
-complaints = complaints.drop("Product", axis=1)
-
-
-# In[103]:
+# In[51]:
 
 
 train_pool = Pool(
     data=X_train,
     label=y_train,
-    text_features=['word_tokens']
+    text_features=['Issue', 'Consumer complaint narrative', 'Company public response']
 )
 valid_pool = Pool(
     data=X_valid, 
     label=y_valid,
-    text_features=['word_tokens']
+    text_features=['Issue', 'Consumer complaint narrative', 'Company public response']
 )
 
 
-# In[104]:
+# In[64]:
 
 
 # тонкий конфиг катбуста
@@ -1198,99 +1157,19 @@ model = fit_model(
 )
 
 
-# In[105]:
+# In[54]:
 
 
 y_pred_catboost =  model.predict(X_valid)
 
 
-# In[116]:
-
-
-TEST = pd.DataFrame(data=["Managing an account"], columns=["word_tokens"])
-
-
-# In[117]:
-
-
-TEST
-
-
-# In[44]:
-
-
-X_valid
-
-
-# In[73]:
-
-
-complaints = pd.read_csv("./data/complaints.csv").head(3000)
-
-
-# In[76]:
-
-
-complaints.head(2)
-
-
-# In[77]:
-
-
-complaints["target"] = complaints["Product"].factorize()[0]
-
-
-# In[84]:
-
-
-complaints.target.unique()
-
-
-# In[79]:
-
-
-complaints = complaints.drop(["Date received", "Sub-product", "Sub-issue", "Company", "State", "ZIP code", "Tags", "Consumer consent provided?", "Submitted via", "Date sent to company", "Company response to consumer", "Timely response?", "Consumer disputed?", "Complaint ID"], axis=1)
-
-
-# In[83]:
-
-
-complaints
-
-
-# In[88]:
-
-
-# Discrete id to String class mapping
-pd.Series(complaints.Product.values, index=complaints.target).to_dict()
-
-
-# In[80]:
-
-
-complaints.fillna('', inplace=True)
-
-
-# In[82]:
-
-
-complaints["word_tokens"] = complaints.apply(lambda r: r.Issue + " " + r["Consumer complaint narrative"] + " " + r["Company public response"], axis=1)
-complaints = complaints.drop(["Issue", "Consumer complaint narrative", "Company public response"], axis=1)
-
-
-# In[118]:
-
-
-model.predict(TEST).tolist()[0][0]
-
-
-# In[41]:
+# In[62]:
 
 
 from matplotlib import pyplot as plt
 
 
-# In[42]:
+# In[63]:
 
 
 eval_model(y_valid, y_pred_catboost, "Catboost")
